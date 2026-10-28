@@ -1,5 +1,11 @@
 import yfinance as yf
-import pandas as pd
+import polars as pl
+
+from load_duck import load_prices_to_duckdb
+
+
+
+TICKERS = ["VOO", "SCHD", "XLV", "XLP", "VGLT"]
 
 
 def extract_prices(ticker: str, start: str):
@@ -11,11 +17,28 @@ def extract_prices(ticker: str, start: str):
   return df
 
 
+def clean_prices(df, ticker):
+  df = df.droplevel("Ticker", axis=1)
+  df = df.reset_index()
+  out = pl.from_pandas(df)
+
+  return out.select(
+    pl.lit(ticker).alias("ticker"),
+    pl.col("Date").cast(pl.Date).alias("date"),
+    pl.col("Close").round(4).alias("close"),
+    pl.col("Adj Close").round(4).alias("adj_close")
+  )
+
+
+def refresh_prices(ticker):
+  raw = extract_prices(ticker, '2018-01-01')
+  df = clean_prices(raw, ticker)
+
+  return load_prices_to_duckdb(df)
+
+
+
 if __name__ == "__main__":
-  df = extract_prices('VOO', '2018-01-01')
-  print(type(df))
-  print(df.shape)
-  print(df.columns)
-  print(df.dtypes)
-  print(df.index[:3])
-  print(df.tail())
+  for t in TICKERS:
+    # refresh_prices(t)
+    print(t, refresh_prices(t))
